@@ -1,0 +1,10 @@
+vendors:
+  - name: piaotian
+    hostname: https://www.ptwxz.com
+    novels:
+    - name: 大奉打更人
+      indexURL: /bookinfo/11/11014.html
+    - name: 萬族之劫
+      indexURL: /bookinfo/10/10811.html
+    - name: 超神機械師
+      indexURL: /bookinfo/9/9051.html
