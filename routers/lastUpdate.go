@@ -1,6 +1,8 @@
 package routers
 
 import (
+	"sync"
+
 	"github.com/AnCheTeng/govel/config"
 	"github.com/AnCheTeng/govel/crawler"
 	"github.com/gin-gonic/gin"
@@ -27,21 +29,41 @@ func getVendorCrawlers() []crawler.ICrawler {
 	return vendorCrawlers
 }
 
+func goCrawlerWorker(
+	novel crawler.Novel, vendorCrawler crawler.ICrawler,
+	jobqueue chan gin.H, wg *sync.WaitGroup,
+) {
+	defer wg.Done()
+	chapterName, chapterURL := vendorCrawler.LatestChapter(novel)
+	jobqueue <- gin.H{
+		"name":    novel.Name,
+		"chapter": chapterName,
+		"url":     chapterURL,
+	}
+	log.WithFields(log.Fields{
+		"name": novel.Name, "chapterName": chapterName, "chapterURL": chapterURL,
+	}).Info("Fetch success, latest chapter: ", chapterName)
+}
+
 // GetLastUpdate - get last update by vendors
 func GetLastUpdate(c *gin.Context) {
 	vendorCrawlers := getVendorCrawlers()
 	vendorCrawler := vendorCrawlers[0]
-	ret := []gin.H{}
-	for _, novel := range vendorCrawler.GetNovels() {
-		chapterName, chapterURL := vendorCrawler.LatestChapter(novel)
-		ret = append(ret, gin.H{
-			"name":    novel.Name,
-			"chapter": chapterName,
-			"url":     chapterURL,
-		})
-		log.WithFields(log.Fields{
-			"name": novel.Name, "chapterName": chapterName, "chapterURL": chapterURL,
-		}).Info("Fetch success, latest chapter: ", chapterName)
+
+	novels := vendorCrawler.GetNovels()
+	totalNovels := len(novels)
+	wg := sync.WaitGroup{}
+	wg.Add(totalNovels)
+	jobqueue := make(chan gin.H, totalNovels)
+	for _, novel := range novels {
+		go goCrawlerWorker(novel, vendorCrawler, jobqueue, &wg)
 	}
+	wg.Wait()
+
+	ret := []gin.H{}
+	for i := 0; i < totalNovels; i++ {
+		ret = append(ret, <-jobqueue)
+	}
+
 	c.JSON(200, ret)
 }
